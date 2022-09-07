@@ -325,7 +325,7 @@ ArrayList<String> parse(String description) {
             case "040B":
                 logging("Unhandled attrId 0x040B.",100) 
                 break
-	    case "0421":
+		    case "0421":
                 switch (msgMap["value"]) {
                     case "00":
                         logging("Closing.",100)
@@ -468,6 +468,15 @@ ArrayList<String> startLevelChange(String direction) {
     }
 }
 
+ArrayList<String> startPositionChange(String direction) {
+    logging("startLevelChange(direction=$direction)", 1)
+	if(direction == "open") {
+        return open()
+    } else {
+        return close()
+    }
+}
+
 ArrayList<String> reverseCurtain() {
     logging("reverseCurtain()", 1)
 	ArrayList<String> cmd = []
@@ -545,11 +554,13 @@ ArrayList<String> stop() {
 }
 
 ArrayList<String> stopLevelChange() {
-    logging("stop()", 1)
-    ArrayList<String> cmd = []
-	cmd += zigbeeCommand(CLUSTER_WINDOW_COVERING, COMMAND_PAUSE)
-    //logging("stop cmd=${cmd}", 0)
-    return cmd
+    logging("stopLevelChange()", 1)
+    return stop()
+}
+
+ArrayList<String> stopPositionChange() {
+    logging("stopPositionChange()", 1)
+    return stop()
 }
 
 ArrayList<String> enableAutoClose() {
