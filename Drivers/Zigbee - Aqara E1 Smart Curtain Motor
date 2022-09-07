@@ -387,7 +387,16 @@ ArrayList<String> parse(String description) {
             case "00F7":
                 msgMap["value"] = parseXiaomiStruct(msgMap["value"], isFCC0=true)
                 logging("msgMap: ${msgMap}", 1)
-                logging("Xiaomi specific data structure.  Skipping data we don't need.",100)
+                if(msgMap["value"].containsKey("battery")) {
+                    Integer value = msgMap["value"]["battery"]/2
+                    logging("Battery: ${value}%", 100)
+                    sendEvent(name:"battery", value: value) 
+                }
+                if(msgMap["value"].containsKey("currentPosition")) {
+                    curtainPosition = msgMap["value"]["currentPosition"]
+                    logging("SETTING POSITION: ${curtainPosition}", 100)
+                    positionEvent(curtainPosition)
+                }
                 break
 	    	default:
 		    	logging("Unknown attrId: 0x${msgMap["attrId"]}",100)
@@ -909,13 +918,14 @@ Map parseXiaomiStruct(String xiaomiStruct, boolean isFCC0=false, boolean hasLeng
         '68': 'unknown9',
         '69': 'unknown10',
         '6A': 'unknown11',
+        '6B': 'currentPosition',
         '6E': 'unknown12',
         '6F': 'unknown13',
-        '95': 'consumption',
+        '95': 'consumption1',
         '96': 'voltage',
         '98': 'power',
         '97': 'gestureCounter1',
-        '97': 'consumption',
+        '97': 'consumption2',
         '98': 'gestureCounter2',
         '98': 'power',
         '99': 'gestureCounter3',
