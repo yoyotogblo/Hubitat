@@ -43,12 +43,18 @@
  *    2020-03-01  Rebecca Ellenby Added Left, Right, Up, Down, and Ok custom commands.
  *    2020-07-10  Dan Ogorchock  Fixed minor bug in setLevel() command
  *    2020-09-18  abuttino       Added Home Control Buttons for Harmony Elite/950
- *    2020-09-18  Dan Ogorchock   Minor code cleanup
- *    2020-09-20  Dan Ogorchock   Use pushed and held events for Home Control Buttons.
- *
+ *    2020-09-18  Dan Ogorchock  Minor code cleanup
+ *    2020-09-20  Dan Ogorchock  Use pushed and held events for Home Control Buttons.
+ *    2020-11-23  Dan Ogorchock  Added custom level attributes for Home Control Buttons.  Thanks @fabien.giuliano and @abuttino.
+ *    2020-12-28  Dan Ogorchock  Fixed Null division issue caused in the 11-23-2020 release
+ *    2021-01-04  Dan Ogorchock  Added Play, Pause, and Stop custom commands for the current Activity - valid for only Activities that support TransportBasic commands
+ *    2021-03-29  @chirpy        Added Channel Number selection for Activities that support NumericBasic numbers
+ *    2021-04-25  Dan Ogorchock  Corrected data type of custom attributes
+ *    2021-07-02  Dan Ogorchock  Added Presence Capability to indicate whether or not the connection to the Harmony Hub is 'present' or 'not present'
+ *    2021-07-25  Dan Ogorchock  Improved log.debug handling
  */
 
-def version() {"v0.1.20200920"}
+def version() {"v0.1.20210725"}
 
 import hubitat.helper.InterfaceUtils
 
@@ -62,6 +68,7 @@ metadata {
         capability "Audio Volume"
         capability "Actuator"
         capability "Switch"
+        capability "Presence Sensor"  //used to determine if the Harmony Hub is connected or not
 
         //command "sendMsg", ["String"]
         //command "getConfig"
@@ -72,6 +79,10 @@ metadata {
         command "channelUp"
         command "channelDown"
         command "channelPrev"
+        command "channelNumber", ["INTEGER"]
+        command "play"
+        command "pause"
+        command "stop"
 
         // Labeled Actuator
         command "leftPress", [[name:"DeviceID", type: "STRING", description: "Harmony Hub Device ID", constraints: ["STRING"]]]
@@ -81,6 +92,10 @@ metadata {
         command "okPress", [[name:"DeviceID", type: "STRING", description: "Harmony Hub Device ID", constraints: ["STRING"]]]
         
         attribute "Activity","String"
+        attribute "bulb1Level","Number"
+        attribute "bulb2Level","Number"
+        attribute "socket1Level","Number"
+        attribute "socket2Level","Number"
     }
 }
 
@@ -99,6 +114,8 @@ preferences {
 def parse(String description) {
     if (logEnable) log.debug "parsed: $description"
     //state.description = []
+    //state.description = description
+
     def json = null;
     try{
         json = new groovy.json.JsonSlurper().parseText(description)
@@ -123,12 +140,37 @@ def parse(String description) {
                 def tempID = (it.id == "-1") ? "PowerOff" : "${it.id}"                    
                 if (logEnable) log.debug "Activity Label: ${it.label}, ID: ${tempID}"
                 
-                //store portion of config results in state variable (needed for volume/channel control) 
+                //store portion of config results in state variable (needed for volume/channel/play/pause/stop controls) 
+                //find the deviceId for volume controls
                 def volume = "null"
                 if (it.roles?.VolumeActivityRole) volume = it.roles?.VolumeActivityRole
+                //find the deviceId for channel controls
                 def channel = "null"
+                def channelNumbers = "null"
                 if (it.roles?.ChannelChangingActivityRole) channel = it.roles?.ChannelChangingActivityRole
-                state.HarmonyConfig << ["id":"${it.id}", "label":"${it.label}", "VolumeActivityRole":"${volume}", "ChannelChangingActivityRole":"${channel}"]
+                //find the deviceId for the TransportBasic Controls (Play/Pause/Stop)
+                //find the deviceId for the NumericBasic Controls (0/1/2/3/4/5/6/7/8/9)
+                def transportBasic = "null"
+                it.controlGroup?.each { it2 ->
+                    if (it2.name == "TransportBasic") {
+                        it2.function?.each { it3 ->
+                            if (it3.name == "Play") {
+                                def temp = new groovy.json.JsonSlurper().parseText(it3.action)
+                                transportBasic = "${temp.deviceId}"
+                            }
+                        }
+                    }
+                    else if (it2.name == "NumericBasic") {
+                        it2.function?.each { it3 ->
+                            if (it3.name == "Number9") {
+                                def temp = new groovy.json.JsonSlurper().parseText(it3.action)
+                                channelNumbers = "${temp.deviceId}"
+                            }
+                        }
+                    }
+                }
+                //store deviceId's in state variable
+                state.HarmonyConfig << ["id":"${it.id}", "label":"${it.label}", "VolumeActivityRole":"${volume}", "ChannelChangingActivityRole":"${channel}", "TransportBasic":"${transportBasic}", "ChannelNumbers":"${channelNumbers}"]
                 
                 //Create a Child Switch Device for each Activity if needed, default all of them to 'off' for now
                 updateChild(tempID, "unknown", it.label)
@@ -196,6 +238,14 @@ def parse(String description) {
     else if ((json?.type == "automation.state?notify")  && (description.contains('"status":1'))) {
         // AJB Added On/Off Functions for Home Control Buttons to generate pushed and held events
         if (hcBulbOne) {
+            if (description.contains(hcBulbOne)) {
+                def tempbrightness = json?.data[hcBulbOne].brightness
+                if (tempbrightness) {
+                    tempbrightness = Math.round(tempbrightness/254*100/10)*10
+                    if (logEnable) log.debug "Bulb 1 Changed to $tempbrightness"
+                    sendEvent(name:"bulb1Level", value: tempbrightness, descriptionText: "Bulb 1 Dimmer Level changed", isStateChange: true)
+                }
+            }
 		    if ((description.contains(hcBulbOne)) && (description.contains('"on":true'))) {
 			    if (logEnable) log.debug "Bulb Button 1 was 'pushed'"
 			    sendEvent(name:"pushed", value: 1, descriptionText: "Bulb Button 1 was pushed", isStateChange: true)
@@ -206,6 +256,14 @@ def parse(String description) {
 	        }
         }
         if (hcBulbTwo) {
+            if (description.contains(hcBulbTwo)) {
+                def tempbrightness = json?.data[hcBulbTwo].brightness
+                if (tempbrightness) {
+                    tempbrightness = Math.round(tempbrightness/254*100/10)*10
+                    if (logEnable) log.debug "Bulb 2 Changed to $tempbrightness"
+                    sendEvent(name:"bulb2Level", value: tempbrightness, descriptionText: "Bulb 2 Dimmer Level Changed", isStateChange: true)
+                }
+            }
 		    if ((description.contains(hcBulbTwo)) && (description.contains('"on":true'))) {
 			    if (logEnable) log.debug "Bulb Button 2 was 'pushed'"
 			    sendEvent(name:"pushed", value: 2, descriptionText: "Bulb Button 2 was pushed", isStateChange: true)
@@ -216,6 +274,14 @@ def parse(String description) {
 	        }   
         }   
 	    if (hcSocketOne) {
+            if (description.contains(hcSocketOne)) {
+                def tempbrightness = json?.data[hcSocketOne].brightness
+                if (tempbrightness) {
+                    tempbrightness = Math.round(tempbrightness/254*100/10)*10
+                    if (logEnable) log.debug "Socket 1 Changed to $tempbrightness"
+                    sendEvent(name:"socket1Level", value: tempbrightness, descriptionText: "Socket 1 Dimmer Level changed", isStateChange: true)
+                }
+            }            
 		    if ((description.contains(hcSocketOne)) && (description.contains('"on":true'))) {
 			    if (logEnable) log.debug "Socket Button 1 was 'pushed'"
 			    sendEvent(name:"pushed", value: 3, descriptionText: "Socket Button 1 was pushed", isStateChange: true)
@@ -226,6 +292,14 @@ def parse(String description) {
 		    }
 	    }
 	    if (hcSocketTwo) {
+            if (description.contains(hcSocketTwo)) {
+                def tempbrightness = json?.data[hcSocketTwo].brightness
+                if (tempbrightness) {
+                    tempbrightness = Math.round(tempbrightness/254*100/10)*10
+                    if (logEnable) log.debug "Socket 2 Changed to $tempbrightness"
+                    sendEvent(name:"socket2Level", value: tempbrightness, descriptionText: "Socket Button 2 Dimmer Level changed", isStateChange: true)
+                }
+            }  
 		    if ((description.contains(hcSocketTwo)) && (description.contains('"on":true'))) {
 			    if (logEnable) log.debug "Socket Button 2 was 'pushed'"
 			    sendEvent(name:"pushed", value: 4, descriptionText: "Socket Button 2 was pushed", isStateChange: true)
@@ -533,6 +607,56 @@ def channelPrev() {
     }
 }
 
+def channelNumber(channel) {
+    state.HarmonyConfig.each { it ->
+        if (it.id == state.currentActivity) {
+            if (it.ChannelNumbers != "null") {
+                for (channelNum in channel.toString()){
+                    deviceCommand(channelNum, it.ChannelNumbers)
+                }
+            } else {
+                log.info "Activity ${it.label} does not support channel numbers"
+            }
+        }
+    }
+}
+
+def play() {
+    state.HarmonyConfig.each { it ->
+        if (it.id == state.currentActivity) {
+            if (it.TransportBasic != "null") {
+                deviceCommand("Play", it.TransportBasic)
+            } else {
+                log.info "Activity ${it.label} does not support TransportBasic 'Play' command"
+            }
+        }
+    }
+}
+
+def pause() {
+    state.HarmonyConfig.each { it ->
+        if (it.id == state.currentActivity) {
+            if (it.TransportBasic != "null") {
+                deviceCommand("Pause", it.TransportBasic)
+            } else {
+                log.info "Activity ${it.label} does not support TransportBasic 'Pause' command"
+            }
+        }
+    }
+}
+
+def stop() {
+    state.HarmonyConfig.each { it ->
+        if (it.id == state.currentActivity) {
+            if (it.TransportBasic != "null") {
+                deviceCommand("Stop", it.TransportBasic)
+            } else {
+                log.info "Activity ${it.label} does not support TransportBasic 'Stop' command"
+            }
+        }
+    }
+}
+
 // Sends a custom command to a chosen device, not reliant on whether it is the default volume/channel changing device
 
 def customCommand(String command, String device) {
@@ -587,19 +711,23 @@ def webSocketStatus(String status){
 
     if(status.startsWith('failure: ')) {
         log.warn("failure message from web socket ${status}")
+        sendEvent(name: "presence", value: "not present", descriptionText: "webSocket connection to Harmony Hub is closed")
         reconnectWebSocket()
     } 
     else if(status == 'status: open') {
         log.info "websocket is open"
         // success! reset reconnect delay
+        sendEvent(name: "presence", value: "present", descriptionText: "webSocket connection to Harmony Hub is open")
         pauseExecution(1000)
         state.reconnectDelay = 1
     } 
     else if (status == "status: closing"){
         log.warn "WebSocket connection closing."
+        sendEvent(name: "presence", value: "not present", descriptionText: "webSocket connection to Harmony Hub is closed")
     } 
     else {
         log.warn "WebSocket error, reconnecting."
+        sendEvent(name: "presence", value: "not present", descriptionText: "webSocket connection to Harmony Hub is closed")
         reconnectWebSocket()
     }
 }

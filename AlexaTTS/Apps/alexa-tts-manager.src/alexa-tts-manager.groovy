@@ -45,6 +45,9 @@
  *     v0.6.0   2020-10-25  lg kahn         add mesg if cookie updated sucessfully, also add setvolume command called from each indiv. device.
  *     v0.6.1   2020-11-04  Dan Ogorchock   Add support for Ecobee Thermostat with Alexa builtin.  Thank you Greg Veres!
  *     v0.6.2   2020-11-04  Dan Ogorchock   Added timeout parameter to all http calls
+ *     v0.6.3   2020-11-05  Dan Ogorchock   Minor tweak to pull request from @yototogblo to allow user defined ownerID. This is needed to use "All Echos"
+ *                                          if there are multiple Echo devices on the account that have different owners.
+ *     v0.6.4   2020-11-07  Dan Ogorchock   Improved error notifications if option notification device defined.
  */
 
 definition(
@@ -97,6 +100,9 @@ def pageOne(){
         section("Please choose your country") {
             input "alexaCountry", "enum", multiple: false, required: true, options: getURLs().keySet().collect()
         }
+        section("Alexa Owner ID (Optional)") {
+            input("ownerID", "text", title: "Optionally enter an Owner ID. This is useful for Amazon Household accounts where the Alexa devices have different owners", submitOnChange: true, required: false)
+        }
         section("Notification Device") {
             paragraph "Optionally assign a device for error notifications (like when the cookie is invalid or refresh fails)"
             input "notificationDevice", "capability.notification", multiple: false, required: false
@@ -127,6 +133,7 @@ def pageTwo(){
 }
 
 def speakMessage(String message, String device) {
+    def errorMessage
     
     if (overrideSwitch != null && overrideSwitch.currentSwitch == 'off') {
         log.info "${overrideSwitch} is off, AlexaTTS will not speak message '${message}'"
@@ -151,6 +158,7 @@ def speakMessage(String message, String device) {
                     def DEVICETYPE = "${it.deviceType}"
                     def DEVICESERIALNUMBER = "${it.serialNumber}"
                     def MEDIAOWNERCUSTOMERID = "${it.deviceOwnerCustomerId}"
+                    if (ownerID) { MEDIAOWNERCUSTOMERID = ownerID }
                     def LANGUAGE = getURLs()."${alexaCountry}".Language
                     
                     def command = ""
@@ -213,11 +221,13 @@ def speakMessage(String message, String device) {
                catch (groovyx.net.http.HttpResponseException hre) {
                     //Noticed an error in parsing the http response.  For now, catch it to prevent errors from being logged
                     if (hre.getResponse().getStatus() != 200) {
-                        log.error "'speakMessage()': Error making Call (Data): ${hre.getResponse().getData()}"
-                        log.error "'speakMessage()': Error making Call (Status): ${hre.getResponse().getStatus()}"
-                        log.error "'speakMessage()': Error making Call (getMessage): ${hre.getMessage()}"
-                        if (hre.getResponse().getStatus() == 400) {
-                            notifyIfEnabled("Alexa TTS: ${hre.getResponse().getData()}")
+                        errorMessage = new String("${hre.getResponse().getData()}")
+                        log.warn "'speakMessage()': Error making Call (Data): ${errorMessage}"
+                        log.warn "'speakMessage()': Error making Call (Status): ${hre.getResponse().getStatus()}"
+                        log.warn "'speakMessage()': Error making Call (getMessage): ${hre.getMessage()}"
+                        if ((hre.getResponse().getStatus() == 400) || (hre.getResponse().getStatus() == 429)) {
+                            //log.warn errorMessage
+                            notifyIfEnabled("Alexa TTS: ${errorMessage}")
                         }
                         else {
                             notifyIfEnabled("Alexa TTS: Please check your cookie!")
@@ -565,6 +575,7 @@ def setVolume(Integer newVolume, String device)
                     def DEVICETYPE = "${it.deviceType}"
                     def DEVICESERIALNUMBER = "${it.serialNumber}"
                     def MEDIAOWNERCUSTOMERID = "${it.deviceOwnerCustomerId}"
+                    if (ownerID) { MEDIAOWNERCUSTOMERID = ownerID }
                     def LANGUAGE = getURLs()."${alexaCountry}".Language
                  
 	

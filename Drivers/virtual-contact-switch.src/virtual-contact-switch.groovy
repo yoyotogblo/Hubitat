@@ -1,11 +1,11 @@
-/**
- *  Virtual Motion with Switch
+/*
+ * Virtual Contact Sensor with Switch
  *
- *  https://raw.githubusercontent.com/ogiewon/Hubitat/master/Drivers/virtual-motion-switch.src/virtual-motion-switch.groovy
+ *  https://raw.githubusercontent.com/ogiewon/Hubitat/master/Drivers/virtual-contact-switch.src/virtual-contact-switch.groovy
  *
- *
- *
- *  Copyright 2018 Daniel Ogorchock
+ * Originally created by Stephan Hackett (used with permission)
+ *  
+ *  Copyright 2021 Dan G Ogorchock 
  *
  *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *  in compliance with the License. You may obtain a copy of the License at:
@@ -20,21 +20,19 @@
  *
  *    Date        Who            What
  *    ----        ---            ----
- *    2018-11-03  Dan Ogorchock  Original Creation
- *    2020-01-25  Dan Ogorchock  Added ImportURL metadata
- *    2021-01-07  Dan Ogorchock  Added auto off feature, Actuator Capability, and improved logic
+ *    2021-01-07  Dan Ogorchock  Original Creation - Added auto off feature, Actuator Capability, ImportURL metadata, and improved logic
  * 
  */
 
 metadata {
-    definition (name: "Virtual Motion Sensor with Switch", namespace: "ogiewon", author: "Daniel Ogorchock", importUrl: "https://raw.githubusercontent.com/ogiewon/Hubitat/master/Drivers/virtual-motion-switch.src/virtual-motion-switch.groovy") {
+    definition (name: "Virtual Contact Sensor with Switch", namespace: "ogiewon", author: "Dan Ogorchock", importUrl: "https://raw.githubusercontent.com/ogiewon/Hubitat/master/Drivers/virtual-contact-switch.src/virtual-contact-switch.groovy") {
         capability "Sensor"
-		capability "Actuator"
-        capability "Motion Sensor"
+        capability "Actuator"
+        capability "Contact Sensor"
         capability "Switch"
 		
-        command "active"
-        command "inactive"
+        command "open"
+        command "close"
     }
 	preferences {
         input name: "reversed", type: "bool", title: "Reverse Action", defaultValue: false, required: true
@@ -42,29 +40,29 @@ metadata {
 	}
 }
 
-def active(){
+def open(){
     if (reversed) off()
     else on()
 }
 
-def inactive(){
+def close(){
     if (reversed) on()
     else off()
 }
 
 def on(){
     sendEvent(name: "switch", value: "on")
-	if(reversed==true) motionVal = "inactive"
-	else motionVal = "active"
-	sendEvent(name: "motion", value: motionVal)
+	if(reversed==true) contactVal = "closed"
+	else contactVal = "open"
+	sendEvent(name: "contact", value: contactVal)
 	if (autoOffDuration.toInteger() > 0) runIn(autoOffDuration.toInteger(), 'off')
 }
 
 def off(){
     sendEvent(name: "switch", value: "off")
-	if(reversed==true) motionVal = "active"
-	else motionVal = "inactive"
-	sendEvent(name: "motion", value: motionVal)
+	if(reversed==true) contactVal = "open"
+	else contactVal = "closed"
+	sendEvent(name: "contact", value: contactVal)
 }
 
 def installed(){
