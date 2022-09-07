@@ -325,15 +325,15 @@ ArrayList<String> parse(String description) {
             case "040B":
                 logging("Unhandled attrId 0x040B.",100) 
                 break
-		    case "0421":
+	    case "0421":
                 switch (msgMap["value"]) {
                     case "00":
-                        logging("Opening.",100)
-                        sendEvent([name:"windowShade", value: "opening"])
-                        break
-                    case "01":
                         logging("Closing.",100)
                         sendEvent([name:"windowShade", value: "closing"])
+                        break
+                    case "01":
+                        logging("Opening.",100)
+                        sendEvent([name:"windowShade", value: "opening"])
                         break
                     case "02":
                         logging("Movement stopped.",100)
