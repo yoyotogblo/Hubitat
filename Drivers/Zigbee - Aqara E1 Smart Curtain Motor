@@ -584,14 +584,14 @@ void setPosition(position) {
     if(position == 100 && getDeviceDataByName('model') == "lumi.curtain") {
         logging("Command: Open", 1)
         //logging("cluster: ${CLUSTER_ON_OFF}, command: ${COMMAND_OPEN}", 0)
-        cmd += zigbeeCommand(CLUSTER_WINDOW_COVERING, COMMAND_CLOSE)
+        cmd += zigbeeCommand(CLUSTER_WINDOW_COVERING, COMMAND_OPEN)
     } else if(position < 1 && getDeviceDataByName('model') == "lumi.curtain") {
         logging("Command: Close", 1)
         //logging("cluster: ${CLUSTER_ON_OFF}, command: ${COMMAND_CLOSE}", 0)
-        cmd += zigbeeCommand(CLUSTER_WINDOW_COVERING, COMMAND_OPEN)
+        cmd += zigbeeCommand(CLUSTER_WINDOW_COVERING, COMMAND_CLOSE)
     } else {
         logging("Set Position: ${position}%", 1)
-        cmd += zigbeeCommand(CLUSTER_WINDOW_COVERING, COMMAND_GOTO_LIFT_PERCENTAGE, zigbee.convertToHexString(100-position.toInteger(), 2))
+        cmd += zigbeeCommand(CLUSTER_WINDOW_COVERING, COMMAND_GOTO_LIFT_PERCENTAGE, zigbee.convertToHexString(position.toInteger(), 2))
         //cmd += zigbeeWriteAttribute(CLUSTER_WINDOW_COVERING, POSITION_ATTR_VALUE, ENCODING_SIZE, Float.floatToIntBits(position))
     }
     logging("cmd=${cmd}", 1)
